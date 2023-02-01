@@ -35,13 +35,13 @@ class Conv2d(nn.Module):
     self.weight = Parameter(torch.Tensor(out_channels, in_channels, kernel_size[0], kernel_size[1]))
     self.bias = Parameter(torch.Tensor(out_channels))
     if init=="uniform":
-      self.weight.data._uniform(-1,1)
+      self.weight.data.uniform_(-1,1)
       self.bias.data[:] = 0
     elif init=="orth":
-      print(kernel_size,in_channels,out_channels)
+      #print(kernel_size,in_channels,out_channels)
       X = np.random.random((kernel_size[0]*kernel_size[1]*in_channels, out_channels))
       U, _, Vt = np.linalg.svd(X)
-      print(X.shape, U.shape, Vt.shape)
+      #print(X.shape, U.shape, Vt.shape)
       W = U[0:out_channels,:].reshape(out_channels, in_channels, kernel_size[0], kernel_size[1])
       self.weight.data[:] = torch.tensor(W)
       self.bias.data[:] = 0
@@ -49,8 +49,8 @@ class Conv2d(nn.Module):
       assert np.abs( (W[1,:]*(W[0,:])).sum()) < 1e-6
     elif init=="xe":
       var = 2/in_channels**2
-      
-      self.weight.data = torch.normal( )._normal(0,2/in_channels**2)
+      std = np.sqrt(var)     
+      self.weight.data.normal_(0,std)
       self.bias.data[:] = 0
     else:
       raise ValueError("Unknown init type")
@@ -83,14 +83,14 @@ class ConvNetwork(nn.Module):
 
 class ConvNetwork2(nn.Module):
   def __init__(self, dataset,init="xe"):
-    super(ConvNetwork,self).__init__()
+    super(ConvNetwork2,self).__init__()
     x,y = dataset[0]
     c,h,w = x.size()
     out_dim = 10
 
-    self.net = nn.Sequential( Conv2d(c,10,(3,3), padding=(1,1),init=init),
+    self.net = nn.Sequential( Conv2d(c,9,(3,3), padding=(1,1),init=init),
                              torch.nn.ReLU(),
-                             Conv2d(10,20,(3,3), padding=(1,1),init=init),
+                             Conv2d(9,20,(3,3), padding=(1,1),init=init),
                              torch.nn.ReLU(),
                              Conv2d(20,out_dim,(28,28), padding=(0,0),init=init))
   def forward(self,x):
@@ -98,14 +98,14 @@ class ConvNetwork2(nn.Module):
 
 class ConvNetwork3(nn.Module):
   def __init__(self, dataset,init="xe"):
-    super(ConvNetwork,self).__init__()
+    super(ConvNetwork3,self).__init__()
     x,y = dataset[0]
     c,h,w = x.size()
     out_dim = 10
 
-    self.net = nn.Sequential( Conv2d(c,10,(3,3), padding=(1,1),init=init),
+    self.net = nn.Sequential( Conv2d(c,9,(3,3), padding=(1,1),init=init),
                              torch.nn.ReLU(),
-                             Conv2d(10,10,(3,3), padding=(1,1),init=init),
+                             Conv2d(9,10,(3,3), padding=(1,1),init=init),
                              torch.nn.MaxPool2d(2),
                              Conv2d(10,20,(3,3), padding=(1,1),init=init),
                              torch.nn.ReLU(),
@@ -147,8 +147,8 @@ train_loader = DataLoader(train_dataset, batch_size = bs, pin_memory = True)
 validation_loader = DataLoader(val_dataset, batch_size = bs)
 
 
-#objective = torch.nn.CrossEntropyLoss()
-myobjective = CrossEntropyLoss()
+objective = torch.nn.CrossEntropyLoss()
+#myobjective = CrossEntropyLoss()
 
 
 def do_it(model):
@@ -157,7 +157,7 @@ def do_it(model):
   losses = []
   validations = []
 
-  num_epochs = 30
+  num_epochs = 30 
   loop =tqdm(total=len(train_loader)*num_epochs, position = 0)
 
   for epoch in range(num_epochs):
@@ -166,7 +166,7 @@ def do_it(model):
 
       optimizer.zero_grad()
       y_hat =  model(x)
-      loss = myobjective(y_hat, y_truth)
+      loss = objective(y_hat, y_truth)
 
       #assert loss - myobjective(y_hat, y_truth) < 1e-6, f"myloss {myobjective(y_hat, y_truth)} != loss {loss}"
 
@@ -181,11 +181,14 @@ def do_it(model):
       optimizer.step()
 
       if batch %100 == 0:
-        val = np.mean( [myobjective(model(x.cuda()), y.cuda()).item() for x,y in validation_loader])
+        val = np.mean( [objective(model(x.cuda()), y.cuda()).item() for x,y in validation_loader])
         validations.append((len(losses),val))
 
 
       loop.set_description("batch:{} loss:{:.4f} val_loss:{:.4f}".format(batch, loss.item(), validations[-1][1]))
-      return validations
+
 
   loop.close()
+  plt.plot(losses,label="train")
+  plt.plot(*zip(*validations),label="val")
+  return losses, validations
